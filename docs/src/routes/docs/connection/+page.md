@@ -54,9 +54,9 @@ const int serverPort = 3000;              // From BP Mobile Network Management
    - **Active**: Connected and healthy
    - **Disconnected**: Connection lost
 4. View connection quality indicators:
-   - **Excellent**: &lt; 50ms latency, 0 missed pings
-   - **Good**: &lt; 100ms latency, &lt; 2 missed pings
-   - **Fair**: &lt; 200ms latency, &lt; 3 missed pings
+   - **Excellent**: less than 50ms latency, 0 missed pings
+   - **Good**: less than 100ms latency, less than 2 missed pings
+   - **Fair**: less than 200ms latency, less than 3 missed pings
    - **Poor**: Higher latency or more missed pings
 
 ## Troubleshooting

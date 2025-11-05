@@ -9,7 +9,8 @@ const config = {
 		vitePreprocess(),
 		mdsvex({
 			remarkPlugins: [],
-			rehypePlugins: []
+			rehypePlugins: [],
+			layout: false
 		})
 	],
 
