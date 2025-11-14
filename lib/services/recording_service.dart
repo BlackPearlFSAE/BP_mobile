@@ -509,16 +509,22 @@ class RecordingService {
 
       // ส่งต่อไป API
       try {
-        final res = await http.post(
-          Uri.parse('https://restapi-bp.onrender.com/api/stat/add'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        );
+        if (sendToApiEnabled) {
+          final res = await http.post(
+            Uri.parse('https://restapi-bp.onrender.com/api/stat/add'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          );
 
-        if (res.statusCode == 201) {
-          print('✅ ส่งข้อมูลไป API สำเร็จ');
+          if (res.statusCode == 201) {
+            print('✅ ส่งข้อมูลไป API สำเร็จ');
+          } else {
+            print('⚠️ ส่ง API ไม่สำเร็จ: ${res.statusCode} ${res.body}');
+          }
         } else {
-          print('⚠️ ส่ง API ไม่สำเร็จ: ${res.statusCode} ${res.body}');
+          print(
+            '⚠️ Sending to API disabled, stored locally: ${entry.topicName}',
+          );
         }
       } catch (e) {
         print('❌ Error sending to API: $e');
@@ -570,6 +576,14 @@ class RecordingService {
       print('Error handling publisher data for $topicName: $e');
       // Don't rethrow - continue recording even if one entry fails
     }
+  }
+
+  bool sendToApiEnabled = true;
+
+  /// Method to toggle
+  void toggleSendToApi(bool value) {
+    sendToApiEnabled = value;
+    print('Send to API: ${sendToApiEnabled ? "ENABLED" : "DISABLED"}');
   }
 
   /// Get latest entries for a topic
