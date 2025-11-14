@@ -17,9 +17,10 @@ class RecordingConsoleScreen extends ConsumerStatefulWidget {
 
 class _RecordingConsoleScreenState
     extends ConsumerState<RecordingConsoleScreen> {
+  bool _sendToApiEnabled = true;
   @override
   // Toggle for sending data to API
-  bool _sendToApiEnabled = true; // default true
+  // default true
   void initState() {
     super.initState();
     // Refresh state when screen is opened
