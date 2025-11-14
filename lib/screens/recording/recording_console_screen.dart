@@ -11,11 +11,16 @@ class RecordingConsoleScreen extends ConsumerStatefulWidget {
   const RecordingConsoleScreen({super.key, required this.experimentId});
 
   @override
-  ConsumerState<RecordingConsoleScreen> createState() => _RecordingConsoleScreenState();
+  ConsumerState<RecordingConsoleScreen> createState() =>
+      _RecordingConsoleScreenState();
 }
 
-class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen> {
+class _RecordingConsoleScreenState
+    extends ConsumerState<RecordingConsoleScreen> {
+  bool _sendToApiEnabled = true;
   @override
+  // Toggle for sending data to API
+  // default true
   void initState() {
     super.initState();
     // Refresh state when screen is opened
@@ -33,10 +38,11 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
   @override
   Widget build(BuildContext context) {
     final recordingState = ref.watch(recordingStateProvider);
-    
+
     // Check if actually recording for this experiment
     // Use recordingState which is kept in sync via streams
-    final isActuallyRecording = recordingState.isRecording &&
+    final isActuallyRecording =
+        recordingState.isRecording &&
         recordingState.activeExperiment?.id == widget.experimentId;
 
     return Scaffold(
@@ -73,7 +79,43 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
         children: [
           // Statistics section
           _buildStatisticsSection(context, recordingState),
-          
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Send data to API',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                Switch(
+                  value: _sendToApiEnabled,
+                  onChanged: (value) {
+                    setState(() {
+                      _sendToApiEnabled = value;
+                    });
+
+                    // Update service toggle
+                    final service = ref.read(recordingServiceProvider);
+                    service.toggleSendToApi(value);
+
+                    // Optional: feedback
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          value
+                              ? 'Sending to API enabled'
+                              : 'Sending to API disabled',
+                        ),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
           const Divider(),
 
           // Publisher status indicators
@@ -82,9 +124,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
           const Divider(),
 
           // Data log console
-          Expanded(
-            child: _buildDataLogConsole(context, recordingState),
-          ),
+          Expanded(child: _buildDataLogConsole(context, recordingState)),
 
           // Stop button
           Padding(
@@ -100,9 +140,9 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
                         Navigator.pop(context);
                       },
                 icon: Icon(isActuallyRecording ? Icons.stop : Icons.close),
-                label: Text(isActuallyRecording
-                    ? 'Stop Recording'
-                    : 'Recording Stopped'),
+                label: Text(
+                  isActuallyRecording ? 'Stop Recording' : 'Recording Stopped',
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isActuallyRecording
                       ? AppColors.main
@@ -117,8 +157,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
     );
   }
 
-  Widget _buildStatisticsSection(
-      BuildContext context, RecordingState state) {
+  Widget _buildStatisticsSection(BuildContext context, RecordingState state) {
     String formatBytes(int bytes) {
       if (bytes < 1024) return '$bytes B';
       if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -156,11 +195,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
                   ),
                 ],
               ),
-              Container(
-                width: 1,
-                height: 40,
-                color: AppColors.textTertiary,
-              ),
+              Container(width: 1, height: 40, color: AppColors.textTertiary),
               Column(
                 children: [
                   const Text(
@@ -209,11 +244,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
                   ),
                 ],
               ),
-              Container(
-                width: 1,
-                height: 30,
-                color: AppColors.textTertiary,
-              ),
+              Container(width: 1, height: 30, color: AppColors.textTertiary),
               Column(
                 children: [
                   const Text(
@@ -241,7 +272,9 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
   }
 
   Widget _buildPublisherStatusSection(
-      BuildContext context, RecordingState state) {
+    BuildContext context,
+    RecordingState state,
+  ) {
     if (state.publisherStatus.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16.0),
@@ -258,7 +291,9 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
           final isActive = entry.value;
           return Chip(
             avatar: CircleAvatar(
-              backgroundColor: isActive ? AppColors.accent : AppColors.textSecondary,
+              backgroundColor: isActive
+                  ? AppColors.accent
+                  : AppColors.textSecondary,
               radius: 8,
             ),
             label: Text(
@@ -268,8 +303,9 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
                 fontWeight: FontWeight.bold,
               ),
             ),
-            backgroundColor:
-                isActive ? AppColors.accent.withValues(alpha: 0.1) : AppColors.surface,
+            backgroundColor: isActive
+                ? AppColors.accent.withValues(alpha: 0.1)
+                : AppColors.surface,
           );
         }).toList(),
       ),
@@ -319,7 +355,9 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
             ),
             children: entries.isEmpty
                 ? [const ListTile(title: Text('No data yet'))]
-                : entries.map((entry) => _buildDataEntryTile(context, entry)).toList(),
+                : entries
+                      .map((entry) => _buildDataEntryTile(context, entry))
+                      .toList(),
           ),
         );
       },
@@ -331,18 +369,21 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
     final timeString = DateFormat('HH:mm:ss.SSS').format(timestamp);
 
     // Preview data (show first few fields)
-    final dataPreview = entry.data.entries.take(3).map((e) {
-      final value = e.value;
-      String valueStr;
-      if (value is double) {
-        valueStr = value.toStringAsFixed(2);
-      } else if (value is int) {
-        valueStr = value.toString();
-      } else {
-        valueStr = value.toString();
-      }
-      return '${e.key}: $valueStr';
-    }).join(', ');
+    final dataPreview = entry.data.entries
+        .take(3)
+        .map((e) {
+          final value = e.value;
+          String valueStr;
+          if (value is double) {
+            valueStr = value.toStringAsFixed(2);
+          } else if (value is int) {
+            valueStr = value.toString();
+          } else {
+            valueStr = value.toString();
+          }
+          return '${e.key}: $valueStr';
+        })
+        .join(', ');
 
     return ListTile(
       dense: true,
@@ -366,8 +407,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
 
   void _showDataDetails(BuildContext context, DataEntry entry) {
     final timestamp = DateTime.fromMillisecondsSinceEpoch(entry.timestamp);
-    final timeString =
-        DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(timestamp);
+    final timeString = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(timestamp);
 
     showDialog(
       context: context,
@@ -380,13 +420,17 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
             children: [
               Text('Timestamp: $timeString'),
               const SizedBox(height: 16),
-              const Text('Data:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Data:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              ...entry.data.entries.map((e) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Text('${e.key}: ${e.value}'),
-                  )),
+              ...entry.data.entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Text('${e.key}: ${e.value}'),
+                ),
+              ),
             ],
           ),
         ),
@@ -404,7 +448,7 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
     // Always allow stopping - check both provider and service state
     final recordingState = ref.read(recordingStateProvider);
     final service = ref.read(recordingServiceProvider);
-    
+
     // If already stopped, just navigate back
     if (!recordingState.isRecording && !service.isRecording) {
       if (context.mounted) {
@@ -426,10 +470,10 @@ class _RecordingConsoleScreenState extends ConsumerState<RecordingConsoleScreen>
         print('Error stopping service directly: $e2');
       }
     }
-    
+
     // Invalidate provider to force state update
     ref.invalidate(recordingStateProvider);
-    
+
     if (context.mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(

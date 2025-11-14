@@ -57,13 +57,17 @@ class ExperimentRepository {
     } catch (e) {
       print('Warning: Could not enable foreign keys: $e');
     }
-    
+
     // Topics and data entries will be deleted via CASCADE
-    final result = await db.delete('experiments', where: 'id = ?', whereArgs: [id]);
-    
+    final result = await db.delete(
+      'experiments',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
     // Clean up any orphaned entries (in case CASCADE didn't work)
     await cleanupOrphanedEntries();
-    
+
     return result;
   }
 
@@ -156,7 +160,7 @@ class ExperimentRepository {
       return 0;
     }
   }
-  
+
   // Clean up orphaned data entries (entries without valid experiments)
   Future<int> cleanupOrphanedEntries() async {
     final db = await _dbHelper.database;
@@ -492,7 +496,7 @@ class ExperimentRepository {
         '/storage/emulated/0/Download',
         '/sdcard/Download',
       ];
-      
+
       // Try each path and use the first one that exists or can be created
       for (var path in possiblePaths) {
         try {
@@ -510,7 +514,7 @@ class ExperimentRepository {
           continue;
         }
       }
-      
+
       // Fallback: try to get external storage and navigate to Downloads
       try {
         final externalDir = await getExternalStorageDirectory();
@@ -531,7 +535,7 @@ class ExperimentRepository {
       } catch (e) {
         // Fall through to last resort
       }
-      
+
       // Last resort: use external storage directory
       final directory = await getExternalStorageDirectory();
       return directory?.path ?? '';

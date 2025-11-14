@@ -33,7 +33,7 @@ class PublisherManager {
 
   // Stream controllers for enable/disable state changes
   final Map<String, StreamController<bool>> _enabledControllers = {};
-  
+
   // Stream controllers for sampling rate changes
   final Map<String, StreamController<double>> _samplingRateControllers = {};
 
@@ -42,7 +42,7 @@ class PublisherManager {
     for (var key in _enabledState.keys) {
       _enabledControllers[key] = StreamController<bool>.broadcast();
     }
-    
+
     // Initialize sampling rate controllers for internal publishers
     for (var key in _samplingRates.keys) {
       _samplingRateControllers[key] = StreamController<double>.broadcast();
@@ -75,41 +75,43 @@ class PublisherManager {
       // Load port from settings
       final networkSettings = NetworkSettingsService();
       final port = await networkSettings.getPort();
-      
+
       _webSocketServer = WebSocketServer(port: port);
       _externalPublisher = ExternalPublisher(server: _webSocketServer!);
-      
+
       // Load topic subscriptions
       final subscriptionService = TopicSubscriptionService();
       final subscriptions = await subscriptionService.getSubscribedTopics();
       _webSocketServer!.subscribeTopics(subscriptions.toList());
-      
+
       // Listen to client connections/disconnections and topic discoveries
       _webSocketServer!.clientConnectedStream.listen((client) {
         // Emit topics when client connects
         _updateAvailableTopics();
       });
-      
+
       _webSocketServer!.clientDisconnectedStream.listen((clientName) {
         // Emit topics when client disconnects
         _updateAvailableTopics();
       });
-      
+
       _webSocketServer!.topicDiscoveredStream.listen((topicInfo) {
         // Emit topics when new topic is discovered
         _updateAvailableTopics();
       });
-      
+
       await _webSocketServer!.start();
-      
+
       // Listen to external publisher active state
       _externalPublisher?.isActive.listen((isActive) {
-        _enabledControllers['external']?.add(_enabledState['external']! && isActive);
+        _enabledControllers['external']?.add(
+          _enabledState['external']! && isActive,
+        );
       });
     }
     return _webSocketServer;
   }
-  
+
   /// Update available topics from network clients
   void _updateAvailableTopics() {
     // This will trigger a refresh of available topics
@@ -131,27 +133,27 @@ class PublisherManager {
 
   /// Get stream of sampling rate changes for a publisher
   Stream<double> getSamplingRateStream(String publisherName) {
-    return _samplingRateControllers[publisherName]?.stream ?? 
-           Stream.value(_samplingRates[publisherName] ?? 1.0);
+    return _samplingRateControllers[publisherName]?.stream ??
+        Stream.value(_samplingRates[publisherName] ?? 1.0);
   }
 
   /// Get available topics based on enabled publishers
   /// Returns list of topic names that can be recorded
   List<String> getAvailableTopics() {
     final topics = <String>[];
-    
+
     // Internal topics
     if (_enabledState['gps'] == true) {
       topics.add('gps/location');
     }
-    
+
     if (_enabledState['imu'] == true) {
       topics.add('imu/acceleration');
       topics.add('imu/gyroscope');
       topics.add('imu/magnetometer');
       topics.add('imu/user_acceleration');
     }
-    
+
     // Network topics from ESP32 clients
     if (_enabledState['external'] == true && _webSocketServer != null) {
       final clients = _webSocketServer!.connectedClients;
@@ -163,21 +165,21 @@ class PublisherManager {
         }
       }
     }
-    
+
     return topics;
   }
-  
+
   /// Get network topics with metadata
   Map<String, Map<String, dynamic>> getNetworkTopics() {
     final topics = <String, Map<String, dynamic>>{};
-    
+
     if (_webSocketServer != null) {
       final clients = _webSocketServer!.connectedClients;
       for (var client in clients) {
         for (var topic in client.topics) {
           final fullTopicName = '${client.name}/$topic';
           final metadata = client.topicMetadata[topic];
-          
+
           topics[fullTopicName] = {
             'client_name': client.name,
             'topic': topic,
@@ -189,21 +191,21 @@ class PublisherManager {
         }
       }
     }
-    
+
     return topics;
   }
-  
+
   /// Get topic metadata for a network topic
   Map<String, dynamic>? getTopicMetadata(String topicName) {
     // Check if it's a network topic (format: client_name/topic)
     if (!topicName.contains('/')) return null;
-    
+
     final parts = topicName.split('/');
     if (parts.length < 2) return null;
-    
+
     final clientName = parts[0];
     final topic = parts.sublist(1).join('/');
-    
+
     if (_webSocketServer != null) {
       final client = _webSocketServer!.getClient(clientName);
       if (client != null) {
@@ -219,7 +221,7 @@ class PublisherManager {
         }
       }
     }
-    
+
     return null;
   }
 
@@ -227,22 +229,14 @@ class PublisherManager {
   /// Uses hotspot IP if hotspot is active, otherwise uses LAN IP
   Future<Map<String, String?>> getWebSocketServerInfo() async {
     if (_webSocketServer == null || !_webSocketServer!.isRunning) {
-      return {
-        'ip': null,
-        'port': null,
-        'url': null,
-      };
+      return {'ip': null, 'port': null, 'url': null};
     }
 
     final ip = await _getBestIpAddress();
     final port = _webSocketServer!.port.toString();
     final url = ip != null ? 'ws://$ip:$port' : null;
 
-    return {
-      'ip': ip,
-      'port': port,
-      'url': url,
-    };
+    return {'ip': ip, 'port': port, 'url': url};
   }
 
   /// Get best IP address (hotspot IP if active, otherwise LAN IP)
@@ -250,10 +244,10 @@ class PublisherManager {
     try {
       // Import NetworkManager
       final networkManager = NetworkManager();
-      
+
       // Check if hotspot is active
       final isHotspot = await networkManager.isHotspotActive();
-      
+
       if (isHotspot) {
         // Use hotspot IP
         final hotspotIp = await networkManager.getHotspotIpAddress();
@@ -261,13 +255,13 @@ class PublisherManager {
           return hotspotIp;
         }
       }
-      
+
       // Otherwise, use LAN IP (WiFi connection)
       final lanIp = await networkManager.getLanIpAddress();
       if (lanIp != null) {
         return lanIp;
       }
-      
+
       // Fallback: try to get any IP
       final anyIp = await networkManager.getIpAddress();
       return anyIp;
@@ -342,7 +336,7 @@ class PublisherManager {
     // Safely check enabled state - return false if not found
     final isEnabled = _enabledState[publisherName] ?? false;
     if (!isEnabled) return false;
-    
+
     switch (publisherName) {
       case 'gps':
         return _gpsPublisher.isCurrentlyActive;
@@ -366,8 +360,7 @@ class PublisherManager {
 
   /// Get stream of enabled state for a publisher
   Stream<bool> getEnabledStream(String publisherName) {
-    return _enabledControllers[publisherName]?.stream ?? 
-           Stream.value(false);
+    return _enabledControllers[publisherName]?.stream ?? Stream.value(false);
   }
 
   /// Get publisher instance by name
@@ -400,43 +393,43 @@ class PublisherManager {
   /// Restart WebSocket server with new port
   Future<void> restartWebSocketServer({int? newPort}) async {
     final wasEnabled = _enabledState['external'] == true;
-    
+
     // Stop server if running
     if (_webSocketServer != null) {
       await stopWebSocketServer();
       _externalPublisher = null;
     }
-    
+
     // Set new port if provided
     if (newPort != null) {
       final networkSettings = NetworkSettingsService();
       await networkSettings.setPort(newPort);
     }
-    
+
     // Recreate server with new port
     final networkSettings = NetworkSettingsService();
     final port = await networkSettings.getPort();
     _webSocketServer = WebSocketServer(port: port);
     _externalPublisher = ExternalPublisher(server: _webSocketServer!);
-    
+
     // Reload topic subscriptions
     final subscriptionService = TopicSubscriptionService();
     final subscriptions = await subscriptionService.getSubscribedTopics();
     _webSocketServer!.subscribeTopics(subscriptions.toList());
-    
+
     // Set up listeners
     _webSocketServer!.clientConnectedStream.listen((client) {
       _updateAvailableTopics();
     });
-    
+
     _webSocketServer!.clientDisconnectedStream.listen((clientName) {
       _updateAvailableTopics();
     });
-    
+
     _webSocketServer!.topicDiscoveredStream.listen((topicInfo) {
       _updateAvailableTopics();
     });
-    
+
     // Restart if it was enabled
     if (wasEnabled) {
       await _webSocketServer!.start();
@@ -450,13 +443,13 @@ class PublisherManager {
     _gpsPublisher.dispose();
     _imuPublisher.dispose();
     _externalPublisher?.dispose();
-    
+
     // Close stream controllers
     for (var controller in _enabledControllers.values) {
       controller.close();
     }
     _enabledControllers.clear();
-    
+
     for (var controller in _samplingRateControllers.values) {
       controller.close();
     }

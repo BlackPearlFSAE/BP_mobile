@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 import '../models/experiment.dart';
 import '../models/topic.dart';
 import '../models/data_entry.dart';
@@ -18,7 +21,8 @@ class RecordingService {
   List<Topic>? _enabledTopics; // Store enabled topics for re-subscription
   final Map<String, TopicPublisher> _activePublishers = {};
   final Map<String, StreamSubscription> _subscriptions = {};
-  final Map<String, StreamSubscription> _enabledStateSubscriptions = {}; // Watch publisher enable/disable
+  final Map<String, StreamSubscription> _enabledStateSubscriptions =
+      {}; // Watch publisher enable/disable
   final Map<String, Queue<DataEntry>> _latestEntries = {};
   final StreamController<Map<String, List<DataEntry>>>
   _latestEntriesController =
@@ -138,7 +142,7 @@ class RecordingService {
       // Publishers should already be enabled/started via PublisherManager
       for (var topic in topics) {
         if (!topic.enabled) continue;
-        
+
         // Subscribe to topic with error handling
         await _subscribeToTopic(topic);
       }
@@ -283,7 +287,9 @@ class RecordingService {
       }
 
       if (!_publisherManager.isPublisherEnabled(publisherName)) {
-        print('Warning: Publisher $publisherName is not enabled for topic ${topic.name}');
+        print(
+          'Warning: Publisher $publisherName is not enabled for topic ${topic.name}',
+        );
         // Don't subscribe yet, but don't throw error - will retry when enabled
         return;
       }
@@ -298,7 +304,8 @@ class RecordingService {
       } else if (_isNetworkTopic(topic.name)) {
         // Network topics - get sampling rate from metadata
         final metadata = _publisherManager.getTopicMetadata(topic.name);
-        samplingRate = metadata?['sampling_rate'] as double? ?? topic.samplingRate;
+        samplingRate =
+            metadata?['sampling_rate'] as double? ?? topic.samplingRate;
       } else {
         // Fallback to topic rate
         samplingRate = topic.samplingRate;
@@ -383,41 +390,46 @@ class RecordingService {
       _enabledStateSubscriptions[publisherName]?.cancel();
 
       // Subscribe to enabled state changes
-      _enabledStateSubscriptions[publisherName] = 
-          _publisherManager.getEnabledStream(publisherName).listen(
-        (isEnabled) async {
-          if (!_isRecording) return;
+      _enabledStateSubscriptions[publisherName] = _publisherManager
+          .getEnabledStream(publisherName)
+          .listen(
+            (isEnabled) async {
+              if (!_isRecording) return;
 
-          // Find all topics for this publisher
-          final topicsForPublisher = _enabledTopics!.where((t) {
-            if (publisherName == 'gps') return t.name.startsWith('gps/');
-            if (publisherName == 'imu') return t.name.startsWith('imu/');
-            if (publisherName == 'external') return _isNetworkTopic(t.name);
-            return false;
-          }).toList();
+              // Find all topics for this publisher
+              final topicsForPublisher = _enabledTopics!.where((t) {
+                if (publisherName == 'gps') return t.name.startsWith('gps/');
+                if (publisherName == 'imu') return t.name.startsWith('imu/');
+                if (publisherName == 'external') return _isNetworkTopic(t.name);
+                return false;
+              }).toList();
 
-          if (isEnabled) {
-            // Publisher was enabled - subscribe to topics
-            print('Publisher $publisherName enabled, subscribing to topics');
-            for (var topic in topicsForPublisher) {
-              if (!_activePublishers.containsKey(topic.name)) {
-                await _subscribeToTopic(topic);
+              if (isEnabled) {
+                // Publisher was enabled - subscribe to topics
+                print(
+                  'Publisher $publisherName enabled, subscribing to topics',
+                );
+                for (var topic in topicsForPublisher) {
+                  if (!_activePublishers.containsKey(topic.name)) {
+                    await _subscribeToTopic(topic);
+                  }
+                }
+              } else {
+                // Publisher was disabled - unsubscribe from topics gracefully
+                print(
+                  'Publisher $publisherName disabled, unsubscribing from topics',
+                );
+                for (var topic in topicsForPublisher) {
+                  await _unsubscribeFromTopic(topic.name);
+                }
               }
-            }
-          } else {
-            // Publisher was disabled - unsubscribe from topics gracefully
-            print('Publisher $publisherName disabled, unsubscribing from topics');
-            for (var topic in topicsForPublisher) {
-              await _unsubscribeFromTopic(topic.name);
-            }
-          }
-        },
-        onError: (error) {
-          print('Error in enabled state stream for $publisherName: $error');
-          // Don't cancel - keep watching
-        },
-        cancelOnError: false,
-      );
+            },
+            onError: (error) {
+              print('Error in enabled state stream for $publisherName: $error');
+              // Don't cancel - keep watching
+            },
+            cancelOnError: false,
+          );
     }
   }
 
@@ -462,7 +474,9 @@ class RecordingService {
         if (webSocketServer != null) {
           final client = webSocketServer.getClient(clientName);
           if (client == null || !client.isConnected) {
-            print('Warning: Client $clientName disconnected, topic $actualTopicName unavailable');
+            print(
+              'Warning: Client $clientName disconnected, topic $actualTopicName unavailable',
+            );
             // Don't record this entry, but don't stop recording - other topics continue
             return;
           }
@@ -476,7 +490,7 @@ class RecordingService {
     try {
       // Create data entry with experiment_id and session_id
       // Extract actual data payload (for network topics, data is nested)
-      final dataPayload = data.containsKey('data') 
+      final dataPayload = data.containsKey('data')
           ? data['data'] as Map<String, dynamic>
           : data; // For internal topics, data is already the payload
 
@@ -491,7 +505,30 @@ class RecordingService {
       // Insert into database (with retry logic for database locks)
       await _repository.insertDataEntry(entry);
       _sessionEntriesCount++;
+      final payload = entry.toJson();
 
+      // ส่งต่อไป API
+      try {
+        if (sendToApiEnabled) {
+          final res = await http.post(
+            Uri.parse('https://restapi-bp.onrender.com/api/stat/add'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          );
+
+          if (res.statusCode == 201) {
+            print('✅ ส่งข้อมูลไป API สำเร็จ');
+          } else {
+            print('⚠️ ส่ง API ไม่สำเร็จ: ${res.statusCode} ${res.body}');
+          }
+        } else {
+          print(
+            '⚠️ Sending to API disabled, stored locally: ${entry.topicName}',
+          );
+        }
+      } catch (e) {
+        print('❌ Error sending to API: $e');
+      }
       // Update latest entries (keep max 5 per topic)
       if (!_latestEntries.containsKey(topicName)) {
         _latestEntries[topicName] = Queue<DataEntry>();
@@ -541,6 +578,14 @@ class RecordingService {
     }
   }
 
+  bool sendToApiEnabled = true;
+
+  /// Method to toggle
+  void toggleSendToApi(bool value) {
+    sendToApiEnabled = value;
+    print('Send to API: ${sendToApiEnabled ? "ENABLED" : "DISABLED"}');
+  }
+
   /// Get latest entries for a topic
   List<DataEntry> getLatestEntries(String topicName) {
     return _latestEntries[topicName]?.toList().reversed.toList() ?? [];
@@ -569,70 +614,71 @@ class RecordingService {
   Map<String, String> getUnavailableTopics() {
     try {
       final unavailable = <String, String>{};
-      
+
       if (!_isRecording || _enabledTopics == null) {
         return unavailable;
       }
 
-    for (var topic in _enabledTopics!) {
-      // Check if topic is active
-      if (_activePublishers.containsKey(topic.name)) {
-        // Topic is active, check if it's a network topic and client is disconnected
-        if (_isNetworkTopic(topic.name)) {
-          final parts = topic.name.split('/');
-          if (parts.isNotEmpty) {
-            final clientName = parts[0];
-            final webSocketServer = _publisherManager.webSocketServer;
-            if (webSocketServer != null) {
-              final client = webSocketServer.getClient(clientName);
-              if (client == null || !client.isConnected) {
-                unavailable[topic.name] = 'Client $clientName disconnected';
-              }
-            } else {
-              unavailable[topic.name] = 'WebSocket server not initialized';
-            }
-          }
-        }
-      } else {
-        // Topic is not active - check why
-        String publisherName;
-        if (topic.name.startsWith('gps/')) {
-          publisherName = 'gps';
-        } else if (topic.name.startsWith('imu/')) {
-          publisherName = 'imu';
-        } else if (_isNetworkTopic(topic.name)) {
-          publisherName = 'external';
-          // Check if client exists
-          final parts = topic.name.split('/');
-          if (parts.isNotEmpty) {
-            final clientName = parts[0];
-            final webSocketServer = _publisherManager.webSocketServer;
-            if (webSocketServer != null) {
-              final client = webSocketServer.getClient(clientName);
-              if (client == null) {
-                unavailable[topic.name] = 'Client $clientName not found';
-              } else if (!client.isConnected) {
-                unavailable[topic.name] = 'Client $clientName disconnected';
+      for (var topic in _enabledTopics!) {
+        // Check if topic is active
+        if (_activePublishers.containsKey(topic.name)) {
+          // Topic is active, check if it's a network topic and client is disconnected
+          if (_isNetworkTopic(topic.name)) {
+            final parts = topic.name.split('/');
+            if (parts.isNotEmpty) {
+              final clientName = parts[0];
+              final webSocketServer = _publisherManager.webSocketServer;
+              if (webSocketServer != null) {
+                final client = webSocketServer.getClient(clientName);
+                if (client == null || !client.isConnected) {
+                  unavailable[topic.name] = 'Client $clientName disconnected';
+                }
               } else {
-                unavailable[topic.name] = 'Publisher not enabled';
+                unavailable[topic.name] = 'WebSocket server not initialized';
               }
-            } else {
-              unavailable[topic.name] = 'WebSocket server not initialized';
             }
-          } else {
-            unavailable[topic.name] = 'Publisher not enabled';
           }
         } else {
-          publisherName = 'unknown';
-          unavailable[topic.name] = 'Publisher not enabled';
-        }
-        
-        // Check if publisher is enabled
-        if (publisherName != 'unknown' && !_publisherManager.isPublisherEnabled(publisherName)) {
-          unavailable[topic.name] = 'Publisher $publisherName disabled';
+          // Topic is not active - check why
+          String publisherName;
+          if (topic.name.startsWith('gps/')) {
+            publisherName = 'gps';
+          } else if (topic.name.startsWith('imu/')) {
+            publisherName = 'imu';
+          } else if (_isNetworkTopic(topic.name)) {
+            publisherName = 'external';
+            // Check if client exists
+            final parts = topic.name.split('/');
+            if (parts.isNotEmpty) {
+              final clientName = parts[0];
+              final webSocketServer = _publisherManager.webSocketServer;
+              if (webSocketServer != null) {
+                final client = webSocketServer.getClient(clientName);
+                if (client == null) {
+                  unavailable[topic.name] = 'Client $clientName not found';
+                } else if (!client.isConnected) {
+                  unavailable[topic.name] = 'Client $clientName disconnected';
+                } else {
+                  unavailable[topic.name] = 'Publisher not enabled';
+                }
+              } else {
+                unavailable[topic.name] = 'WebSocket server not initialized';
+              }
+            } else {
+              unavailable[topic.name] = 'Publisher not enabled';
+            }
+          } else {
+            publisherName = 'unknown';
+            unavailable[topic.name] = 'Publisher not enabled';
+          }
+
+          // Check if publisher is enabled
+          if (publisherName != 'unknown' &&
+              !_publisherManager.isPublisherEnabled(publisherName)) {
+            unavailable[topic.name] = 'Publisher $publisherName disabled';
+          }
         }
       }
-    }
 
       return unavailable;
     } catch (e) {
@@ -654,13 +700,13 @@ class RecordingService {
   /// Dispose resources
   void dispose() {
     stopRecording();
-    
+
     // Cancel all enabled state subscriptions
     for (var subscription in _enabledStateSubscriptions.values) {
       subscription.cancel();
     }
     _enabledStateSubscriptions.clear();
-    
+
     _latestEntriesController.close();
     _totalEntriesController.close();
     _storageSizeController.close();
@@ -678,17 +724,17 @@ class RecordingService {
     // Check if it's a network topic by checking if client exists
     // Format: client_name/topic_tree
     if (!topicName.contains('/')) return false;
-    
+
     final parts = topicName.split('/');
     if (parts.length < 2) return false;
-    
+
     // Check if first part is a known client name
     final webSocketServer = _publisherManager.webSocketServer;
     if (webSocketServer != null) {
       final client = webSocketServer.getClient(parts[0]);
       return client != null;
     }
-    
+
     return false;
   }
 }
