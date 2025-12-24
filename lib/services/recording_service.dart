@@ -511,7 +511,7 @@ class RecordingService {
       try {
         if (sendToApiEnabled) {
           final res = await http.post(
-            Uri.parse('https://restapi-bp.onrender.com/api/stat/add'),
+            Uri.parse('https://mctrl.kmutt.ac.th/ken-api/api/stat/add'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           );
