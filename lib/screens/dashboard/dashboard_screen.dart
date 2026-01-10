@@ -132,12 +132,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
   }
 
-  void _addMarkLog(String eventName) {
+  void _addMarkLog(String category, String eventName) {
     if (!_isMarking) return;
     final String timestamp = DateFormat(
       'yyyy.MM.dd HH:mm:ss',
     ).format(DateTime.now());
-    setState(() => _liveLogs.insert(1, "$timestamp | $eventName"));
+
+    // Format: CATEGORY: event
+    final String formattedEntry = "$category: $eventName";
+
+    setState(() => _liveLogs.insert(1, "$timestamp | $formattedEntry"));
+  }
+
+  // --- CUSTOM LOG DIALOG ---
+  void _showCustomLogDialog() {
+    if (!_isMarking) return;
+    final TextEditingController customController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Custom Log"),
+        content: TextField(
+          controller: customController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: "Enter your message...",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCEL"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (customController.text.trim().isNotEmpty) {
+                _addMarkLog("CUSTOM", customController.text.trim());
+              }
+              Navigator.pop(context);
+            },
+            child: const Text("SAVE"),
+          ),
+        ],
+      ),
+    );
   }
 
   // --- UI COMPONENTS ---
@@ -274,18 +314,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildMarkGridSection("DRIVER ACTION", [
-            "PIT IN",
-            "PIT OUT",
-            "OFF-TRACK",
-            "TURN",
-            "CRASH",
-            "OVERTAKE",
-          ], Colors.blueGrey),
-          _buildMarkGridSection("CAR REACTION", [
-            "FAILURE",
-            "ISSUE",
-          ], Colors.blue),
+
+          _buildMarkGridSection(
+            "DRIVER ACTION",
+            ["PIT IN", "PIT OUT", "OFF-TRACK", "TURN", "CRASH", "OVERTAKE"],
+            Colors.blueGrey,
+            "DRIVER ACTION",
+          ),
+
+          _buildMarkGridSection(
+            "CAR REACTION",
+            ["FAILURE", "ISSUE", "CUSTOM"],
+            Colors.blue,
+            "CAR REACTION",
+          ),
 
           const Text(
             "FLAGS",
@@ -322,7 +364,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildMarkGridSection(String title, List<String> items, Color color) {
+  Widget _buildMarkGridSection(
+    String title,
+    List<String> items,
+    Color color,
+    String category,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -346,8 +393,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             childAspectRatio: 2.2,
           ),
           itemBuilder: (context, index) {
+            final itemName = items[index];
             return ElevatedButton(
-              onPressed: _isMarking ? () => _addMarkLog(items[index]) : null,
+              onPressed: _isMarking
+                  ? () {
+                      if (itemName == "CUSTOM") {
+                        _showCustomLogDialog();
+                      } else {
+                        _addMarkLog(category, itemName);
+                      }
+                    }
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: color,
                 padding: EdgeInsets.zero,
@@ -356,7 +412,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
               child: Text(
-                items[index],
+                itemName,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 13,
@@ -372,9 +428,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _flagIcon(String icon) {
+  Widget _flagIcon(String emoji) {
     return InkWell(
-      onTap: _isMarking ? () => _addMarkLog(icon) : null,
+      onTap: _isMarking
+          ? () {
+              // Convert Emoji to English Text for the log
+              String textLabel;
+              switch (emoji) {
+                case "🟡":
+                  textLabel = "YELLOW FLAG";
+                  break;
+                case "🔴":
+                  textLabel = "RED FLAG";
+                  break;
+                case "⚫":
+                  textLabel = "BLACK FLAG";
+                  break;
+                case "🔵":
+                  textLabel = "BLUE FLAG";
+                  break;
+                case "🟢":
+                  textLabel = "GREEN FLAG";
+                  break;
+                case "🏁":
+                  textLabel = "CHECKERED FLAG";
+                  break;
+                default:
+                  textLabel = "UNKNOWN FLAG";
+              }
+              _addMarkLog("FLAG", textLabel);
+            }
+          : null,
       child: Container(
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(8),
@@ -382,7 +466,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           color: _isMarking ? Colors.white : Colors.grey[300],
           shape: BoxShape.circle,
         ),
-        child: Text(icon, style: const TextStyle(fontSize: 22)),
+        child: Text(emoji, style: const TextStyle(fontSize: 22)),
       ),
     );
   }
@@ -434,7 +518,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       title: Text(
                                         session.runId,
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                       subtitle: Text(
