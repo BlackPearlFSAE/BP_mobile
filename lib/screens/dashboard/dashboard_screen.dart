@@ -351,6 +351,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ].map((f) => _flagIcon(f)).toList(),
             ),
           ),
+          const SizedBox(height: 24),
+
+          // --- ADDED RACE MODE SECTION ---
+          _buildMarkGridSection(
+            "VEHICLE SETUP",
+            ["ENDURANCE", "AUTOCROSS", "SKIDPAD", "ACCELERATION", "CUSTOM"],
+            Colors.deepPurple,
+            "RACE MODE",
+          ),
+
           const Divider(height: 30),
           Center(
             child: TextButton.icon(
@@ -415,7 +425,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 itemName,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize:
+                      11, // Adjusted slightly for longer text like ACCELERATION
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
